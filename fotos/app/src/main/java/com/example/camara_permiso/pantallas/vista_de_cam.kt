@@ -2,9 +2,9 @@ package com.example.camara_permiso.pantallas
 
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
@@ -14,30 +14,19 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import com.example.camara_permiso.R
 import jp.co.cyberagent.android.gpuimage.GPUImage
 import jp.co.cyberagent.android.gpuimage.filter.GPUImageFilter
 import jp.co.cyberagent.android.gpuimage.filter.GPUImageGrayscaleFilter
@@ -45,8 +34,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.*
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -54,56 +42,95 @@ import kotlin.coroutines.suspendCoroutine
 fun PantallaCam() {
     val contexto = LocalContext.current
     val cicloVida = LocalLifecycleOwner.current
-    val vistaPreview = remember { PreviewView(contexto) }
-    val capturador = remember { ImageCapture.Builder().build() }
 
-    var filtroActual by remember { mutableStateOf<GPUImageFilter>(GPUImageFilter()) }
+    var lenteUsado by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
+    val vistaPrevia = remember { PreviewView(contexto) }
+    val capturadorImagen = remember { ImageCapture.Builder().build() }
+    var filtroActual by remember { mutableStateOf<GPUImageFilter?>(null) } // Nullable filter
 
-    // Vincular cámara
-    LaunchedEffect(true) {
-        val proveedor = contexto.obtenerProvedorDeCamara()
-        proveedor.unbindAll()
+    // State to hold the last captured image (for display/further processing)
+    val imagenCapturada = remember { mutableStateOf<Bitmap?>(null) }
 
-        val preview = Preview.Builder().build()
-        val selector = CameraSelector.DEFAULT_BACK_CAMERA
+    LaunchedEffect(lenteUsado) {
+        val proveedorCamara = contexto.obtenerProvedorDeCamara()
+        proveedorCamara.unbindAll()
 
-        preview.setSurfaceProvider(vistaPreview.surfaceProvider)
-
-        try {
-            proveedor.bindToLifecycle(cicloVida, selector, preview, capturador)
-        } catch (e: Exception) {
-            Log.e("PantallaCam", "Error al vincular la cámara", e)
-            // Aquí podrías mostrar un mensaje al usuario indicando que la cámara no está disponible
-        }
+        val selectorCamara = CameraSelector.Builder().requireLensFacing(lenteUsado).build()
+        proveedorCamara.bindToLifecycle(
+            cicloVida,
+            selectorCamara,
+            Preview.Builder().build().apply { setSurfaceProvider(vistaPrevia.surfaceProvider) },
+            capturadorImagen
+        )
     }
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+    Box(Modifier.fillMaxSize()) {
         AndroidView(
-            factory = { vistaPreview },
+            factory = { vistaPrevia },
             modifier = Modifier.fillMaxSize()
         )
 
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(16.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceAround
+                horizontalArrangement = Arrangement.SpaceAround,
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Button(onClick = { filtroActual = GPUImageGrayscaleFilter() }) {
                     Text("Gris")
                 }
+                // Add more filter buttons here
             }
+            Spacer(modifier = Modifier.height(8.dp))
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Button(onClick = {
-                capturarYGuardarImagenConFiltro(contexto, capturador, filtroActual)
-            }) {
-                Text("Capturar con filtro")
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Button(
+                    onClick = {
+                        tomarFoto(
+                            contexto,
+                            capturadorImagen,
+                            filtroActual
+                        ) { bitmap -> imagenCapturada.value = bitmap }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.mipmap.foto1),
+                        contentDescription = "Tomar Foto",
+                        tint = Color.White,
+                        modifier = Modifier.size(ButtonDefaults.IconSize)
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Button(
+                    onClick = { alternarCamara(lenteUsado) { newLens -> lenteUsado = newLens } },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.mipmap.foto2),
+                        contentDescription = "Cambiar Cámara",
+                        tint = Color.White,
+                        modifier = Modifier.size(ButtonDefaults.IconSize)
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Button(
+                    onClick = { abrirGaleria(contexto) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.mipmap.foto3),
+                        contentDescription = "Abrir Galería",
+                        tint = Color.White,
+                        modifier = Modifier.size(ButtonDefaults.IconSize)
+                    )
+                }
             }
         }
     }
@@ -111,89 +138,83 @@ fun PantallaCam() {
 
 private suspend fun Context.obtenerProvedorDeCamara(): ProcessCameraProvider =
     suspendCoroutine { continuation ->
-        ProcessCameraProvider.getInstance(this).also { future ->
-            future.addListener({
-                continuation.resume(future.get())
+        ProcessCameraProvider.getInstance(this).also { provider ->
+            provider.addListener({
+                continuation.resume(provider.get())
             }, ContextCompat.getMainExecutor(this))
         }
     }
 
-private fun capturarYGuardarImagenConFiltro(
-    context: Context,
-    capturador: ImageCapture,
-    filtro: GPUImageFilter
+private fun tomarFoto(
+    contexto: Context,
+    capturadorImagen: ImageCapture,
+    filtro: GPUImageFilter?,
+    onImagenCapturada: (Bitmap) -> Unit // Callback for captured image
 ) {
-    val nombre = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-    val archivoTemporal = File.createTempFile(nombre, ".jpg", context.cacheDir)
+    val nombreArchivo = "Captura_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.jpg"
+    val valoresImagen = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, nombreArchivo)
+        put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/nuestra_app")
+            put(MediaStore.Images.Media.IS_PENDING, 1) // Flag for pending write
+        }
+    }
 
-    val opciones = ImageCapture.OutputFileOptions.Builder(archivoTemporal).build()
+    val opcionesSalida = ImageCapture.OutputFileOptions.Builder(
+        contexto.contentResolver,
+        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+        valoresImagen
+    ).build()
 
-    capturador.takePicture(
-        opciones,
-        ContextCompat.getMainExecutor(context),
+    capturadorImagen.takePicture(
+        opcionesSalida,
+        ContextCompat.getMainExecutor(contexto),
         object : ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                try {
-                    // Convertir a bitmap y aplicar filtro
-                    val bitmapOriginal = BitmapFactory.decodeFile(archivoTemporal.absolutePath)
-                    val gpuImage = GPUImage(context)
-                    gpuImage.setImage(bitmapOriginal)
-                    gpuImage.setFilter(filtro)
-                    val imagenFiltrada = gpuImage.bitmapWithFilterApplied
+                Log.d("CameraX", "Imagen guardada en: ${outputFileResults.savedUri}")
+                // Load the saved image, apply the filter, and pass it back
+                outputFileResults.savedUri?.let { uri ->
+                    val bitmap = BitmapFactory.decodeStream(contexto.contentResolver.openInputStream(uri))
+                    val imagenFiltrada = filtro?.let { applyFilter(contexto, bitmap, it) } ?: bitmap
+                    onImagenCapturada(imagenFiltrada)
 
-                    guardarImagenFiltrada(context, imagenFiltrada)
-                } catch (e: Exception) {
-                    Log.e("CAPTURA_ERROR", "Error al procesar la imagen: ${e.message}")
-                } finally {
-                    archivoTemporal.delete() // Limpiar el archivo temporal
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        valoresImagen.clear()
+                        valoresImagen.put(MediaStore.Images.Media.IS_PENDING, 0)
+                        contexto.contentResolver.update(uri, valoresImagen, null, null) // Clear pending flag
+                    }
                 }
             }
 
             override fun onError(exception: ImageCaptureException) {
-                Log.e("CAPTURA_ERROR", "Error al capturar: ${exception.message}")
-                archivoTemporal.delete() // Limpiar el archivo temporal en caso de error
+                Log.e("CameraX", "Error al tomar la foto: ${exception.message}", exception)
             }
         }
     )
 }
 
-private fun guardarImagenFiltrada(context: Context, bitmap: Bitmap) {
-    val nombreArchivo = "IMG_${System.currentTimeMillis()}.jpg"
-    val resolver = context.contentResolver
-    val contentValues = ContentValues().apply {
-        put(MediaStore.Images.Media.DISPLAY_NAME, nombreArchivo)
-        put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/ConFiltros")
-            put(MediaStore.Images.Media.IS_PENDING, 1)
-        }
+private fun applyFilter(context: Context, bitmap: Bitmap, filter: GPUImageFilter): Bitmap {
+    val gpuImage = GPUImage(context).apply {
+        setImage(bitmap)
+        setFilter(filter)
     }
+    return gpuImage.bitmapWithFilterApplied
+}
 
-    val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+private fun alternarCamara(currentLens: Int, onLensChange: (Int) -> Unit) {
+    onLensChange(
+        if (currentLens == CameraSelector.LENS_FACING_BACK)
+            CameraSelector.LENS_FACING_FRONT
+        else
+            CameraSelector.LENS_FACING_BACK
+    )
+}
 
-    uri?.let { imageUri ->
-        var outputStream: OutputStream? = null
-        try {
-            outputStream = resolver.openOutputStream(imageUri)
-            outputStream?.let {
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, it)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    contentValues.clear()
-                    contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
-                    resolver.update(imageUri, contentValues, null, null)
-                }
-                Log.d("GUARDADO", "Imagen guardada con filtro en: $imageUri")
-            } ?: run {
-                Log.e("GUARDADO_ERROR", "No se pudo abrir el OutputStream para la URI: $imageUri")
-                resolver.delete(imageUri, null, null)
-            }
-        } catch (e: Exception) {
-            Log.e("GUARDADO_ERROR", "Error al guardar la imagen: ${e.message}")
-            resolver.delete(imageUri, null, null)
-        } finally {
-            outputStream?.close()
-        }
-    } ?: run {
-        Log.e("GUARDADO_ERROR", "Error al obtener la URI para guardar la imagen")
+private fun abrirGaleria(contexto: Context) {
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        type = "image/*"
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK
     }
+    contexto.startActivity(intent)
 }
