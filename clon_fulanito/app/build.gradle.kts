@@ -56,13 +56,15 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
-}
-//librerias para retrofitval
-val version_retrofit = "2.9.0"
-implementation("com.squareup.retrofit2:retrofit3:${version_retrofit}")
-implementation("com.squareup.retrofit2:converter-gson:${version_retrofit}")
+
+    //librerias para retrofitval
+    val version_retrofit = "2.9.0"
+    implementation("com.squareup.retrofit2:retrofit3:${version_retrofit}")
+    implementation("com.squareup.retrofit2:converter-gson:${version_retrofit}")
 // libreria para usar programacion asincronicaval
-val version_courtinas = "1.5.1"
-implementation("org.jetbrains.kotlin:kotlinx-cortines-android:${version_courtinas}")
+    val version_courtinas = "1.5.1"
+    implementation("org.jetbrains.kotlin:kotlinx-cortines-android:${version_courtinas}")
 //libreria para checar la info irl
-implementation("androidx.compose.runtime:runtime-livedata:1.7.8")
+    implementation("androidx.compose.runtime:runtime-livedata:1.7.8")
+
+}
